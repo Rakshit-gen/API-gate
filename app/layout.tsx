@@ -10,6 +10,9 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "API Gateway Dashboard",
   description: "High-performance API Gateway and Rate Limiter with Clerk Auth",
+  icons: {
+    icon: "/gate.png",
+  },
 };
 
 export default function RootLayout({
