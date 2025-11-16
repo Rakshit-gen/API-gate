@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
-import { LayoutWrapper } from "@/components/layout-wrapper";
+import { Sidebar } from "@/components/sidebar";
 import { ClerkProvider } from "@clerk/nextjs";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -25,7 +25,12 @@ export default function RootLayout({
       <html lang="en" className="dark">
         <body className={inter.className}>
           <Providers>
-            <LayoutWrapper>{children}</LayoutWrapper>
+            <div className="flex h-screen bg-gray-950">
+              <Sidebar />
+              <main className="flex-1 overflow-auto bg-gray-950">
+                {children}
+              </main>
+            </div>
           </Providers>
         </body>
       </html>
