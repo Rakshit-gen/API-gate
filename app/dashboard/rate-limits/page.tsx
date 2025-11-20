@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthenticatedAPI, createUserQueryKey } from "@/lib/useAuthenticatedAPI";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -14,10 +14,24 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export default function RateLimitsPage() {
+  const { api, userId } = useAuthenticatedAPI();
+
   const { data: apiKeys, isLoading } = useQuery({
-    queryKey: ["apiKeys"],
-    queryFn: api.apiKeys.list,
+    queryKey: createUserQueryKey(["apiKeys"], userId),
+    queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
+      return api.apiKeys.list();
+    },
+    enabled: !!api && !!userId,
   });
+
+  if (!api || !userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-gray-400">Loading authentication...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8">
@@ -44,20 +58,28 @@ export default function RateLimitsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {apiKeys?.map((key: any) => (
-                  <TableRow key={key.id}>
-                    <TableCell className="font-medium">{key.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="secondary">{key.tier}</Badge>
-                    </TableCell>
-                    <TableCell>{key.rate_limit_rpm} requests/minute</TableCell>
-                    <TableCell>
-                      <Badge variant={key.enabled ? "default" : "destructive"}>
-                        {key.enabled ? "Active" : "Disabled"}
-                      </Badge>
+                {apiKeys && apiKeys.length > 0 ? (
+                  apiKeys.map((key: any) => (
+                    <TableRow key={key.id}>
+                      <TableCell className="font-medium">{key.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary">{key.tier}</Badge>
+                      </TableCell>
+                      <TableCell>{key.rate_limit_rpm} requests/minute</TableCell>
+                      <TableCell>
+                        <Badge variant={key.enabled ? "default" : "destructive"}>
+                          {key.enabled ? "Active" : "Disabled"}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center text-muted-foreground">
+                      No API keys found
                     </TableCell>
                   </TableRow>
-                ))}
+                )}
               </TableBody>
             </Table>
           )}
