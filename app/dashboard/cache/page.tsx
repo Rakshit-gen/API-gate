@@ -68,7 +68,30 @@ export default function CachePage() {
       if (!api) throw new Error("Not authenticated");
       return api.cacheRules.delete(id);
     },
-    onSuccess: () => {
+    onMutate: async (id: number) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
+
+      // Snapshot the previous value
+      const previousRules = queryClient.getQueryData(createUserQueryKey(["cacheRules"], userId));
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(createUserQueryKey(["cacheRules"], userId), (old: any) => {
+        if (!old) return old;
+        return old.filter((rule: any) => rule.id !== id);
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousRules };
+    },
+    onError: (err, id, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousRules) {
+        queryClient.setQueryData(createUserQueryKey(["cacheRules"], userId), context.previousRules);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure consistency
       queryClient.invalidateQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
     },
   });

@@ -61,7 +61,30 @@ export default function RoutesPage() {
       if (!api) throw new Error("Not authenticated");
       return api.routes.delete(id);
     },
-    onSuccess: () => {
+    onMutate: async (id: number) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["routes"], userId) });
+
+      // Snapshot the previous value
+      const previousRoutes = queryClient.getQueryData(createUserQueryKey(["routes"], userId));
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(createUserQueryKey(["routes"], userId), (old: any) => {
+        if (!old) return old;
+        return old.filter((route: any) => route.id !== id);
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousRoutes };
+    },
+    onError: (err, id, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousRoutes) {
+        queryClient.setQueryData(createUserQueryKey(["routes"], userId), context.previousRoutes);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure consistency
       queryClient.invalidateQueries({ queryKey: createUserQueryKey(["routes"], userId) });
     },
   });

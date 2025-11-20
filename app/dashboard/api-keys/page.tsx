@@ -60,7 +60,25 @@ export default function APIKeysPage() {
       if (!api) throw new Error("Not authenticated");
       return api.apiKeys.revoke(id);
     },
-    onSuccess: () => {
+    onMutate: async (id: number) => {
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
+      const previousKeys = queryClient.getQueryData(createUserQueryKey(["apiKeys"], userId));
+
+      queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), (old: any) => {
+        if (!old) return old;
+        return old.map((key: any) =>
+          key.id === id ? { ...key, enabled: false } : key
+        );
+      });
+
+      return { previousKeys };
+    },
+    onError: (err, id, context) => {
+      if (context?.previousKeys) {
+        queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), context.previousKeys);
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
     },
   });
@@ -70,7 +88,30 @@ export default function APIKeysPage() {
       if (!api) throw new Error("Not authenticated");
       return api.apiKeys.delete(id);
     },
-    onSuccess: () => {
+    onMutate: async (id: number) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
+
+      // Snapshot the previous value
+      const previousKeys = queryClient.getQueryData(createUserQueryKey(["apiKeys"], userId));
+
+      // Optimistically update to the new value
+      queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), (old: any) => {
+        if (!old) return old;
+        return old.filter((key: any) => key.id !== id);
+      });
+
+      // Return a context object with the snapshotted value
+      return { previousKeys };
+    },
+    onError: (err, id, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousKeys) {
+        queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), context.previousKeys);
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure consistency
       queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
     },
   });
