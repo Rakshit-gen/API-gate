@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthenticatedAPI, createUserQueryKey } from "@/lib/useAuthenticatedAPI";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -32,32 +32,46 @@ export default function APIKeysPage() {
   const [rateLimit, setRateLimit] = useState("60");
 
   const queryClient = useQueryClient();
+  const { api, userId } = useAuthenticatedAPI();
 
   const { data: apiKeys, isLoading } = useQuery({
-    queryKey: ["apiKeys"],
-    queryFn: api.apiKeys.list,
+    queryKey: createUserQueryKey(["apiKeys"], userId),
+    queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
+      return api.apiKeys.list();
+    },
+    enabled: !!api && !!userId,
   });
 
   const createMutation = useMutation({
-    mutationFn: api.apiKeys.create,
+    mutationFn: (data: any) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.apiKeys.create(data);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
       setIsOpen(false);
       resetForm();
     },
   });
 
   const revokeMutation = useMutation({
-    mutationFn: api.apiKeys.revoke,
+    mutationFn: (id: number) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.apiKeys.revoke(id);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: api.apiKeys.delete,
+    mutationFn: (id: number) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.apiKeys.delete(id);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["apiKeys"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
     },
   });
 
@@ -78,6 +92,14 @@ export default function APIKeysPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
   };
+
+  if (!api || !userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-gray-400">Loading authentication...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8">

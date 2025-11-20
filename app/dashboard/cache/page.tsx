@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthenticatedAPI, createUserQueryKey } from "@/lib/useAuthenticatedAPI";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,35 +31,53 @@ export default function CachePage() {
   const [ttl, setTtl] = useState("300");
 
   const queryClient = useQueryClient();
+  const { api, userId } = useAuthenticatedAPI();
 
   const { data: cacheRules, isLoading } = useQuery({
-    queryKey: ["cacheRules"],
-    queryFn: api.cacheRules.list,
+    queryKey: createUserQueryKey(["cacheRules"], userId),
+    queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
+      return api.cacheRules.list();
+    },
+    enabled: !!api && !!userId,
   });
 
   const { data: routes } = useQuery({
-    queryKey: ["routes"],
-    queryFn: api.routes.list,
+    queryKey: createUserQueryKey(["routes"], userId),
+    queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
+      return api.routes.list();
+    },
+    enabled: !!api && !!userId,
   });
 
   const createMutation = useMutation({
-    mutationFn: api.cacheRules.create,
+    mutationFn: (data: any) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.cacheRules.create(data);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cacheRules"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
       setIsOpen(false);
       resetForm();
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: api.cacheRules.delete,
+    mutationFn: (id: number) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.cacheRules.delete(id);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cacheRules"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
     },
   });
 
   const invalidateMutation = useMutation({
-    mutationFn: api.cacheRules.invalidate,
+    mutationFn: (pattern: string) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.cacheRules.invalidate(pattern);
+    },
   });
 
   const resetForm = () => {
@@ -78,6 +96,14 @@ export default function CachePage() {
   const handleInvalidateAll = () => {
     invalidateMutation.mutate("cache:*");
   };
+
+  if (!api || !userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-gray-400">Loading authentication...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8">

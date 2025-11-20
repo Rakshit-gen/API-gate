@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthenticatedAPI, createUserQueryKey } from "@/lib/useAuthenticatedAPI";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart,
@@ -31,17 +31,17 @@ const COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 export default function AnalyticsPage() {
   const [timeRange] = useState("24h");
+  const { api, userId } = useAuthenticatedAPI();
 
   const { data: metrics, isLoading } = useQuery({
-    queryKey: ["analytics", timeRange],
+    queryKey: createUserQueryKey(["analytics", timeRange], userId),
     queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
       const end = new Date();
       const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
-      return api.analytics.getMetrics(
-        start.toISOString(),
-        end.toISOString()
-      );
+      return api.analytics.getMetrics(start.toISOString(), end.toISOString());
     },
+    enabled: !!api && !!userId,
     refetchInterval: 30000,
   });
 
@@ -56,6 +56,14 @@ export default function AnalyticsPage() {
     color: COLORS[i % COLORS.length],
   })) || [];
 
+  if (!api || !userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-gray-400">Loading authentication...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-8 space-y-8">
       <div>
@@ -66,9 +74,7 @@ export default function AnalyticsPage() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Total Requests
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -79,40 +85,28 @@ export default function AnalyticsPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              P50 Latency
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">P50 Latency</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics?.latency_p50 || 0}ms
-            </div>
+            <div className="text-2xl font-bold">{metrics?.latency_p50 || 0}ms</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              P95 Latency
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">P95 Latency</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics?.latency_p95 || 0}ms
-            </div>
+            <div className="text-2xl font-bold">{metrics?.latency_p95 || 0}ms</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              P99 Latency
-            </CardTitle>
+            <CardTitle className="text-sm font-medium">P99 Latency</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {metrics?.latency_p99 || 0}ms
-            </div>
+            <div className="text-2xl font-bold">{metrics?.latency_p99 || 0}ms</div>
           </CardContent>
         </Card>
       </div>
@@ -129,12 +123,7 @@ export default function AnalyticsPage() {
                 <XAxis dataKey="time" />
                 <YAxis />
                 <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="requests"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                />
+                <Line type="monotone" dataKey="requests" stroke="#3b82f6" strokeWidth={2} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -191,9 +180,7 @@ export default function AnalyticsPage() {
                     <TableCell className="font-medium">{endpoint.path}</TableCell>
                     <TableCell>{endpoint.request_count?.toLocaleString()}</TableCell>
                     <TableCell>{endpoint.avg_latency_ms}ms</TableCell>
-                    <TableCell>
-                      {((endpoint.error_rate || 0) * 100).toFixed(2)}%
-                    </TableCell>
+                    <TableCell>{((endpoint.error_rate || 0) * 100).toFixed(2)}%</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

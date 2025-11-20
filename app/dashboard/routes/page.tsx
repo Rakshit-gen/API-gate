@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { useAuthenticatedAPI, createUserQueryKey } from "@/lib/useAuthenticatedAPI";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -33,25 +33,36 @@ export default function RoutesPage() {
   const [retryCount, setRetryCount] = useState("0");
 
   const queryClient = useQueryClient();
+  const { api, userId } = useAuthenticatedAPI();
 
   const { data: routes, isLoading } = useQuery({
-    queryKey: ["routes"],
-    queryFn: api.routes.list,
+    queryKey: createUserQueryKey(["routes"], userId),
+    queryFn: () => {
+      if (!api) throw new Error("Not authenticated");
+      return api.routes.list();
+    },
+    enabled: !!api && !!userId,
   });
 
   const createMutation = useMutation({
-    mutationFn: api.routes.create,
+    mutationFn: (data: any) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.routes.create(data);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["routes"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["routes"], userId) });
       setIsOpen(false);
       resetForm();
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: api.routes.delete,
+    mutationFn: (id: number) => {
+      if (!api) throw new Error("Not authenticated");
+      return api.routes.delete(id);
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["routes"] });
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["routes"], userId) });
     },
   });
 
@@ -71,6 +82,14 @@ export default function RoutesPage() {
       retry_count: parseInt(retryCount),
     });
   };
+
+  if (!api || !userId) {
+    return (
+      <div className="p-8">
+        <div className="text-center text-gray-400">Loading authentication...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-8 space-y-8">
