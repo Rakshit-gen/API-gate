@@ -49,10 +49,48 @@ export default function RoutesPage() {
       if (!api) throw new Error("Not authenticated");
       return api.routes.create(data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["routes"], userId) });
+    onMutate: async (newRoute) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["routes"], userId) });
+
+      // Snapshot the previous value
+      const previousRoutes = queryClient.getQueryData(createUserQueryKey(["routes"], userId));
+
+      // Optimistically add a temporary route (will be replaced with real data on success)
+      const tempId = `temp-${Date.now()}`;
+      const tempRoute = {
+        id: tempId,
+        ...newRoute,
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData(createUserQueryKey(["routes"], userId), (old: any) => {
+        if (!old) return [tempRoute];
+        return [...old, tempRoute];
+      });
+
+      return { previousRoutes, tempId };
+    },
+    onError: (err, newRoute, context) => {
+      // Roll back on error
+      if (context?.previousRoutes) {
+        queryClient.setQueryData(createUserQueryKey(["routes"], userId), context.previousRoutes);
+      }
+    },
+    onSuccess: (data, newRoute, context) => {
+      // Replace temporary route with real data from server
+      queryClient.setQueryData(createUserQueryKey(["routes"], userId), (old: any) => {
+        if (!old) return [data];
+        // Remove temp route and add real one
+        const filtered = old.filter((r: any) => r.id !== context?.tempId);
+        return [...filtered, data];
+      });
       setIsOpen(false);
       resetForm();
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["routes"], userId) });
     },
   });
 

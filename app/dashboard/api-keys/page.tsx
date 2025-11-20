@@ -48,10 +48,50 @@ export default function APIKeysPage() {
       if (!api) throw new Error("Not authenticated");
       return api.apiKeys.create(data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
+    onMutate: async (newKey) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
+
+      // Snapshot the previous value
+      const previousKeys = queryClient.getQueryData(createUserQueryKey(["apiKeys"], userId));
+
+      // Optimistically add a temporary key (will be replaced with real data on success)
+      const tempId = `temp-${Date.now()}`;
+      const tempKey = {
+        id: tempId,
+        ...newKey,
+        key: "gw_loading...",
+        enabled: true,
+        created_at: new Date().toISOString(),
+      };
+
+      queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), (old: any) => {
+        if (!old) return [tempKey];
+        return [...old, tempKey];
+      });
+
+      return { previousKeys, tempId };
+    },
+    onError: (err, newKey, context) => {
+      // Roll back on error
+      if (context?.previousKeys) {
+        queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), context.previousKeys);
+      }
+    },
+    onSuccess: (data, newKey, context) => {
+      // Replace temporary key with real data from server
+      queryClient.setQueryData(createUserQueryKey(["apiKeys"], userId), (old: any) => {
+        if (!old) return [data];
+        // Remove temp key and add real one
+        const filtered = old.filter((k: any) => k.id !== context?.tempId);
+        return [...filtered, data];
+      });
       setIsOpen(false);
       resetForm();
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["apiKeys"], userId) });
     },
   });
 

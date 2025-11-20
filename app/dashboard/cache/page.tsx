@@ -56,10 +56,48 @@ export default function CachePage() {
       if (!api) throw new Error("Not authenticated");
       return api.cacheRules.create(data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
+    onMutate: async (newRule) => {
+      // Cancel any outgoing refetches
+      await queryClient.cancelQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
+
+      // Snapshot the previous value
+      const previousRules = queryClient.getQueryData(createUserQueryKey(["cacheRules"], userId));
+
+      // Optimistically add a temporary rule (will be replaced with real data on success)
+      const tempId = `temp-${Date.now()}`;
+      const tempRule = {
+        id: tempId,
+        ...newRule,
+        enabled: true,
+      };
+
+      queryClient.setQueryData(createUserQueryKey(["cacheRules"], userId), (old: any) => {
+        if (!old) return [tempRule];
+        return [...old, tempRule];
+      });
+
+      return { previousRules, tempId };
+    },
+    onError: (err, newRule, context) => {
+      // Roll back on error
+      if (context?.previousRules) {
+        queryClient.setQueryData(createUserQueryKey(["cacheRules"], userId), context.previousRules);
+      }
+    },
+    onSuccess: (data, newRule, context) => {
+      // Replace temporary rule with real data from server
+      queryClient.setQueryData(createUserQueryKey(["cacheRules"], userId), (old: any) => {
+        if (!old) return [data];
+        // Remove temp rule and add real one
+        const filtered = old.filter((r: any) => r.id !== context?.tempId);
+        return [...filtered, data];
+      });
       setIsOpen(false);
       resetForm();
+    },
+    onSettled: () => {
+      // Always refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: createUserQueryKey(["cacheRules"], userId) });
     },
   });
 
